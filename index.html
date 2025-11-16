@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sandbox Game with Hotbar</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    touch-action: none;
+    font-family: sans-serif;
+    background: #87CEEB;
+  }
+  canvas { display: block; }
+
+  /* Hotbar */
+  #toolbar {
+    position: fixed;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 5px;
+    padding: 5px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    z-index: 10;
+  }
+  .block-btn {
+    width: 50px;
+    height: 50px;
+    border: 2px solid black;
+    cursor: pointer;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    border-radius: 8px;
+    transition: border-color 0.2s;
+  }
+  .block-btn.selected { border-color: yellow; }
+  #more-btn {
+    font-weight: bold;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.3);
+  }
+
+  /* Full inventory overlay */
+  #inventoryOverlay {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 10px;
+    background: rgba(0,0,0,0.8);
+    border-radius: 10px;
+    max-width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+    z-index: 20;
+  }
+
+  /* Tooltip fixed at top */
+  #tooltip {
+    position: fixed;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 16px;
+    pointer-events: none;
+    display: none;
+    z-index: 30;
+  }
+
+  /* Arrow buttons */
+  #arrows {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: 50px 50px 50px;
+    grid-template-rows: 50px 50px 50px;
+    gap: 5px;
+    z-index: 10;
+  }
+  .arrow {
+    width: 50px;
+    height: 50px;
+    background: rgba(0,0,0,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-weight: bold;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- Hotbar -->
+<div id="toolbar"></div>
+
+<!-- Full Inventory Overlay -->
+<div id="inventoryOverlay"></div>
+
+<!-- Tooltip -->
+<div id="tooltip"></div>
+
+<!-- Arrow Controls -->
+<div id="arrows">
+  <div></div><div class="arrow" data-dir="up">↑</div><div></div>
+  <div class="arrow" data-dir="left">←</div><div></div><div class="arrow" data-dir="right">→</div>
+  <div></div><div class="arrow" data-dir="down">↓</div><div></div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let width = window.innerWidth;
+let height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
+
+const blockSize = 50;
+const world = [];
+let offsetX = 0;
+let offsetY = 0;
+let moveX = 0;
+let moveY = 0;
+
+// Tooltip
+const tooltip = document.getElementById('tooltip');
+function showTooltip(text){ tooltip.textContent = text; tooltip.style.display = 'block'; }
+function hideTooltip(){ tooltip.style.display = 'none'; }
+
+// Inventory blocks
+const inventory = [
+  {type:'grass', color:'#7CFC00'},
+  {type:'dirt', color:'#A52A2A'},
+  {type:'stone', color:'#808080'},
+  {type:'cobblestone', color:'#696969'},
+  {type:'sand', color:'#F4E79B'},
+  {type:'red sand', color:'#D16B4A'},
+  {type:'oak planks', color:'#DEB887'},
+  {type:'spruce planks', color:'#A0522D'},
+  {type:'birch planks', color:'#FFF8DC'},
+  {type:'jungle planks', color:'#CD853F'},
+  {type:'acacia planks', color:'#E9967A'},
+  {type:'dark oak planks', color:'#654321'},
+  {type:'stone bricks', color:'#A9A9A9'},
+  {type:'mossy stone bricks', color:'#6B8E23'},
+  {type:'sandstone', color:'#F5DEB3'},
+  {type:'red sandstone', color:'#E07B5F'},
+  {type:'bricks', color:'#B22222'},
+  {type:'nether bricks', color:'#330000'},
+  {type:'quartz block', color:'#F5F5F5'},
+  {type:'chiseled quartz', color:'#FFE4B5'},
+  {type:'obsidian', color:'#0B0B45'},
+  {type:'end stone', color:'#EEDC82'},
+  {type:'clay', color:'#B0C4DE'},
+  {type:'white wool', color:'#FFFFFF'},
+  {type:'orange wool', color:'#FFA500'},
+  {type:'magenta wool', color:'#FF00FF'},
+  {type:'light blue wool', color:'#ADD8E6'},
+  {type:'yellow wool', color:'#FFFF00'},
+  {type:'lime wool', color:'#32CD32'},
+  {type:'pink wool', color:'#FFB6C1'},
+  {type:'gray wool', color:'#808080'},
+  {type:'light gray wool', color:'#D3D3D3'},
+  {type:'cyan wool', color:'#00FFFF'},
+  {type:'purple wool', color:'#800080'},
+  {type:'blue wool', color:'#0000FF'},
+  {type:'brown wool', color:'#8B4513'},
+  {type:'green wool', color:'#006400'},
+  {type:'red wool', color:'#FF0000'},
+  {type:'black wool', color:'#000000'},
+  {type:'gold block', color:'#FFD700'},
+  {type:'iron block', color:'#D8D8D8'},
+  {type:'diamond block', color:'#00FFFF'},
+  {type:'emerald block', color:'#50C878'},
+  {type:'lapis block', color:'#1E90FF'},
+  {type:'coal block', color:'#2F2F2F'},
+  {type:'erase', color:'red'}
+];
+
+let selectedBlock = inventory[0];
+
+// Initialize world
+for(let i=0;i<200;i++){ world[i]=[]; for(let j=0;j<200;j++) world[i][j]=null; }
+
+// Create hotbar
+const toolbar = document.getElementById('toolbar');
+function createHotbar() {
+  toolbar.innerHTML = '';
+  for(let i=0;i<4;i++){
+    const item = inventory[i]; if(!item) continue;
+    const btn = document.createElement('div');
+    btn.className = 'block-btn';
+    btn.style.backgroundColor = item.color;
+    btn.textContent = item.type[0].toUpperCase();
+    if(item===selectedBlock) btn.classList.add('selected');
+
+    // Show tooltip at top
+    btn.addEventListener('pointerenter', ()=>showTooltip(item.type));
+    btn.addEventListener('pointerleave', hideTooltip);
+    btn.addEventListener('touchstart', ()=>showTooltip(item.type));
+    btn.addEventListener('touchend', hideTooltip);
+
+    btn.addEventListener('click', ()=>{ selectedBlock=item; createHotbar(); });
+    toolbar.appendChild(btn);
+  }
+  const more = document.createElement('div');
+  more.id='more-btn'; more.textContent='+';
+  more.addEventListener('click', ()=>document.getElementById('inventoryOverlay').style.display='flex');
+  toolbar.appendChild(more);
+}
+createHotbar();
+
+// Full inventory overlay
+const overlay = document.getElementById('inventoryOverlay');
+overlay.innerHTML = '';
+inventory.forEach(item=>{
+  const btn = document.createElement('div');
+  btn.className='block-btn'; btn.style.backgroundColor=item.color;
+  btn.textContent=item.type[0].toUpperCase();
+
+  btn.addEventListener('pointerenter', ()=>showTooltip(item.type));
+  btn.addEventListener('pointerleave', hideTooltip);
+  btn.addEventListener('touchstart', ()=>showTooltip(item.type));
+  btn.addEventListener('touchend', hideTooltip);
+
+  btn.addEventListener('click', ()=>{ selectedBlock=item; overlay.style.display='none'; createHotbar(); });
+  overlay.appendChild(btn);
+});
+
+// Draw
+function draw(){
+  ctx.clearRect(0,0,width,height);
+  const startX=Math.floor(offsetX/blockSize), startY=Math.floor(offsetY/blockSize);
+  const endX=startX+Math.ceil(width/blockSize)+1, endY=startY+Math.ceil(height/blockSize)+1;
+
+  for(let i=startX;i<endX;i++){
+    for(let j=startY;j<endY;j++){
+      if(world[i]&&world[i][j]){
+        ctx.fillStyle=world[i][j];
+        ctx.fillRect(i*blockSize-offsetX, j*blockSize-offsetY, blockSize, blockSize);
+      }
+    }
+  }
+
+  ctx.strokeStyle='rgba(0,0,0,0.1)';
+  for(let i=startX;i<=endX;i++){ ctx.beginPath(); ctx.moveTo(i*blockSize-offsetX,0); ctx.lineTo(i*blockSize-offsetX,height); ctx.stroke(); }
+  for(let j=startY;j<=endY;j++){ ctx.beginPath(); ctx.moveTo(0,j*blockSize-offsetY); ctx.lineTo(width,j*blockSize-offsetY); ctx.stroke(); }
+
+  offsetX+=moveX; offsetY+=moveY;
+  if(offsetX<0) offsetX=0; if(offsetY<0) offsetY=0;
+  requestAnimationFrame(draw);
+}
+draw();
+
+// Place/remove blocks
+function placeBlock(x,y){
+  const gridX=Math.floor((x+offsetX)/blockSize), gridY=Math.floor((y+offsetY)/blockSize);
+  if(selectedBlock.type==='erase') world[gridX][gridY]=null;
+  else{ if(!world[gridX]) world[gridX]=[]; world[gridX][gridY]=selectedBlock.color; }
+}
+canvas.addEventListener('click', e=>placeBlock(e.clientX,e.clientY));
+canvas.addEventListener('touchstart', e=>placeBlock(e.touches[0].clientX,e.touches[0].clientY));
+
+// Arrows
+document.querySelectorAll('.arrow').forEach(btn=>{
+  btn.addEventListener('pointerdown', ()=> {
+    const dir=btn.dataset.dir;
+    if(dir==='up') moveY=-5; if(dir==='down') moveY=5;
+    if(dir==='left') moveX=-5; if(dir==='right') moveX=5;
+  });
+  btn.addEventListener('pointerup', ()=>{ moveX=0; moveY=0; });
+  btn.addEventListener('pointerleave', ()=>{ moveX=0; moveY=0; });
+});
+
+// Drag camera
+let isDragging=false, dragStart={x:0,y:0}, cameraStart={x:0,y:0};
+canvas.addEventListener('pointerdown', e=>{ isDragging=true; dragStart.x=e.clientX; dragStart.y=e.clientY; cameraStart.x=offsetX; cameraStart.y=offsetY; });
+canvas.addEventListener('pointermove', e=>{ if(isDragging){ offsetX=cameraStart.x-(e.clientX-dragStart.x); offsetY=cameraStart.y-(e.clientY-dragStart.y); if(offsetX<0) offsetX=0; if(offsetY<0) offsetY=0; } });
+canvas.addEventListener('pointerup', e=>isDragging=false);
+canvas.addEventListener('pointercancel', e=>isDragging=false);
+
+// Resize
+window.addEventListener('resize', ()=>{ width=window.innerWidth; height=window.innerHeight; canvas.width=width; canvas.height=height; });
+</script>
+</body>
+  </html>
+  
