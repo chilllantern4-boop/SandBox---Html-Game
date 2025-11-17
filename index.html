@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Sandbox Game with Hotbar</title>
 <style>
   body {
@@ -91,20 +91,41 @@
     left: 50%;
     transform: translateX(-50%);
     display: grid;
-    grid-template-columns: 50px 50px 50px;
-    grid-template-rows: 50px 50px 50px;
-    gap: 5px;
+    grid-template-columns: 60px 60px 60px;
+    grid-template-rows: 60px 60px 60px;
+    gap: 10px;
     z-index: 10;
   }
   .arrow {
-    width: 50px;
-    height: 50px;
+    width: 60px;
+    height: 60px;
     background: rgba(0,0,0,0.2);
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 12px;
+    font-weight: bold;
+    user-select: none;
+    touch-action: none;
+  }
+
+  /* Save/Load buttons for mobile */
+  #saveLoadButtons {
+    position: fixed;
+    top: 50px;
+    right: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    z-index: 50;
+  }
+  .save-btn {
+    padding: 10px 15px;
+    background: rgba(255,255,255,0.3);
     border-radius: 8px;
     font-weight: bold;
+    cursor: pointer;
+    text-align: center;
     user-select: none;
   }
 </style>
@@ -126,6 +147,12 @@
   <div></div><div class="arrow" data-dir="up">↑</div><div></div>
   <div class="arrow" data-dir="left">←</div><div></div><div class="arrow" data-dir="right">→</div>
   <div></div><div class="arrow" data-dir="down">↓</div><div></div>
+</div>
+
+<!-- Mobile Save/Load -->
+<div id="saveLoadButtons">
+  <div class="save-btn" id="saveBtn">Save</div>
+  <div class="save-btn" id="loadBtn">Load</div>
 </div>
 
 <script>
@@ -215,7 +242,6 @@ function createHotbar() {
     btn.textContent = item.type[0].toUpperCase();
     if(item===selectedBlock) btn.classList.add('selected');
 
-    // Show tooltip at top
     btn.addEventListener('pointerenter', ()=>showTooltip(item.type));
     btn.addEventListener('pointerleave', hideTooltip);
     btn.addEventListener('touchstart', ()=>showTooltip(item.type));
@@ -256,9 +282,14 @@ function draw(){
 
   for(let i=startX;i<endX;i++){
     for(let j=startY;j<endY;j++){
-      if(world[i]&&world[i][j]){
-        ctx.fillStyle=world[i][j];
+      if(world[i] && world[i][j]){
+        ctx.fillStyle = world[i][j];
         ctx.fillRect(i*blockSize-offsetX, j*blockSize-offsetY, blockSize, blockSize);
+
+        // Block border
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(i*blockSize-offsetX, j*blockSize-offsetY, blockSize, blockSize);
       }
     }
   }
@@ -302,7 +333,38 @@ canvas.addEventListener('pointercancel', e=>isDragging=false);
 
 // Resize
 window.addEventListener('resize', ()=>{ width=window.innerWidth; height=window.innerHeight; canvas.width=width; canvas.height=height; });
+
+// ----------------- Saving System -----------------
+function saveWorld() {
+  localStorage.setItem('sandboxWorld', JSON.stringify(world));
+  
+}
+
+function loadWorld() {
+  const saved = localStorage.getItem('sandboxWorld');
+  if(saved) {
+    const parsed = JSON.parse(saved);
+    for(let i=0;i<parsed.length;i++){
+      world[i] = parsed[i] || [];
+    }
+    alert('World loaded!');
+  } else {
+    alert('No saved world found.');
+  }
+}
+
+// Auto-save every 10 seconds
+setInterval(saveWorld, 10000);
+
+// Keyboard shortcuts: Ctrl+S to save, Ctrl+L to load
+window.addEventListener('keydown', e=>{
+  if(e.key==='s' && e.ctrlKey) { e.preventDefault(); saveWorld(); }
+  if(e.key==='l' && e.ctrlKey) { e.preventDefault(); loadWorld(); }
+});
+
+// Mobile save/load buttons
+document.getElementById('saveBtn').addEventListener('click', saveWorld);
+document.getElementById('loadBtn').addEventListener('click', loadWorld);
 </script>
 </body>
-  </html>
-  
+</html>
